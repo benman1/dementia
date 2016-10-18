@@ -12,7 +12,7 @@ def test_create():
 
 
 def test_basics():
-    d = ExpiringDict(max_len=3, max_age_seconds=0.01)
+    d = ExpiringDict(max_len=3, max_age_seconds=0.01, pool_time=100)
 
     eq_(d.get('a'), None)
     d['a'] = 'x'
@@ -66,7 +66,7 @@ def test_repr():
 
 
 def test_iter():
-    d = ExpiringDict(max_len=10, max_age_seconds=0.01)
+    d = ExpiringDict(max_len=10, max_age_seconds=0.01, pool_time=100)
     eq_([k for k in d], [])
     d['a'] = 'x'
     d['b'] = 'y'
@@ -86,22 +86,6 @@ def test_clear():
     eq_(len(d), 0)
 
 
-def test_ttl():
-    d = ExpiringDict(max_len=10, max_age_seconds=10)
-    d['a'] = 'x'
-
-    # existent non-expired key
-    ok_(0 < d.ttl('a') < 10)
-
-    # non-existent key
-    eq_(None, d.ttl('b'))
-
-    # expired key
-    with patch.object(OrderedDict, '__getitem__',
-                      Mock(return_value=('x', 10**9))):
-        eq_(None, d.ttl('a'))
-
-
 def test_setdefault():
     d = ExpiringDict(max_len=10, max_age_seconds=0.01)
 
@@ -111,6 +95,20 @@ def test_setdefault():
     sleep(0.01)
 
     eq_('y', d.setdefault('a', 'y'))
+
+def test_time_reset():
+    d = ExpiringDict(max_len=1, max_age_seconds=20, pool_time=10)
+    d['a'] = 'x'
+    sleep(1.05)
+    _ = d.__getitem__('a', with_age=False)
+    _, age = d.__getitem__('a', with_age=True)
+    ok_(age < 1.0)
+
+def test_expired():
+    d = ExpiringDict(max_len=1, max_age_seconds=2, pool_time=1)
+    d['a'] = 'x'
+    sleep(2.00)
+    ok_('a' not in d)
 
 
 def test_not_implemented():

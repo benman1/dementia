@@ -15,10 +15,9 @@ The values stored in the following way:
 The pool_time parameter (default 5 minutes or 60*5 seconds) controls how often
 the cache is cleared of old values.
 '''
-
+import sys
 import time
-from threading import RLock, Thread
-import atexit
+from threading import RLock, Thread, Timer, Event
 from collections import OrderedDict
 
 
@@ -31,9 +30,10 @@ class ExpiringDict(OrderedDict):
         self.max_len = max_len
         self.max_age = max_age_seconds
         self.lock = RLock()
-        self.thread = threading.Thread()
+        self.thread = Thread()
         self.pool_time = pool_time
-        self._purgeStart():
+        self.stop_event = Event()
+        self.__purgeStart()
 
     def __contains__(self, key):
         """ Return True if the dict has a key, else return False. """
@@ -59,7 +59,7 @@ class ExpiringDict(OrderedDict):
             if item_age < self.max_age:
                 if reset_time:
                     # time gets reset on each retrieval
-                    self.__setitem__(key, (value, time.time()))
+                    OrderedDict.__setitem__(self, key, (item[0], time.time()))
                 if with_age:
                     return item[0], item_age
                 else:
@@ -87,18 +87,6 @@ class ExpiringDict(OrderedDict):
                 return item[0]
             except KeyError:
                 return default
-
-    def ttl(self, key):
-        """ Return TTL of the `key` (in seconds).
-
-        Returns None for non-existent or expired keys.
-        """
-        key_value, key_age = self.get(key, with_age=True)
-        if key_age:
-            key_ttl = self.max_age - key_age
-            if key_ttl > 0:
-                return key_ttl
-        return None
 
     def get(self, key, default=None, with_age=False):
         " Return the value for key if key is in the dictionary, else default. "
@@ -156,23 +144,31 @@ class ExpiringDict(OrderedDict):
         raise NotImplementedError()
 
     def interrupt(self):
+        # Wait for thread to exit.
+        self.stop_event.set()
+        # cancel timer
         self.thread.cancel()
 
-    def _purge(self):
+    def __purge(self):
         with self.lock:
             for key in self:
                 try:
-                    item = self[key]
+                    item = OrderedDict.__getitem__(self, key)
                     if time.time() - item[1] > self.max_age:
+                        # print('purging {}'.format(item))
                         del self[key]
                 except KeyError:
                     pass
 
         # schedule the next cleanup
-        self.thread = threading.Timer(self.pool_time, self._purge, ())
+        if not self.stop_event.isSet():
+            self.thread = Timer(self.pool_time, self.__purge, ())
+            self.thread.start()
+
+    def __purgeStart(self):
+        self.thread = Timer(self.pool_time, self.__purge, ())
         self.thread.start()
 
-    def self._purgeStart():
-        self.thread = threading.Timer(self.pool_time, self._purge, ())
-        self.thread.start()
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.interrupt()
 
