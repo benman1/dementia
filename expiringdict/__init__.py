@@ -12,21 +12,18 @@ The values stored in the following way:
     key2: (value2, created_time2)
 }
 
-NOTE: iteration over dict and also keys() do not remove expired values!
+The pool_time parameter (default 5 minutes or 60*5 seconds) controls how often
+the cache is cleared of old values.
 '''
 
 import time
-from threading import RLock
-
-try:
-    from collections import OrderedDict
-except ImportError:
-    # Python < 2.7
-    from ordereddict import OrderedDict
+from threading import RLock, Thread
+import atexit
+from collections import OrderedDict
 
 
 class ExpiringDict(OrderedDict):
-    def __init__(self, max_len, max_age_seconds):
+    def __init__(self, max_len, max_age_seconds, pool_time=60*5):
         assert max_age_seconds >= 0
         assert max_len >= 1
 
@@ -34,6 +31,9 @@ class ExpiringDict(OrderedDict):
         self.max_len = max_len
         self.max_age = max_age_seconds
         self.lock = RLock()
+        self.thread = threading.Thread()
+        self.pool_time = pool_time
+        self._purgeStart():
 
     def __contains__(self, key):
         """ Return True if the dict has a key, else return False. """
@@ -48,7 +48,7 @@ class ExpiringDict(OrderedDict):
             pass
         return False
 
-    def __getitem__(self, key, with_age=False):
+    def __getitem__(self, key, with_age=False, reset_time=True):
         """ Return the item of the dict.
 
         Raises a KeyError if key is not in the map.
@@ -57,6 +57,9 @@ class ExpiringDict(OrderedDict):
             item = OrderedDict.__getitem__(self, key)
             item_age = time.time() - item[1]
             if item_age < self.max_age:
+                if reset_time:
+                    # time gets reset on each retrieval
+                    self.__setitem__(key, (value, time.time()))
                 if with_age:
                     return item[0], item_age
                 else:
@@ -151,3 +154,25 @@ class ExpiringDict(OrderedDict):
     def viewvalues(self):
         """ Return a new view of the dictionary's values. """
         raise NotImplementedError()
+
+    def interrupt(self):
+        self.thread.cancel()
+
+    def _purge(self):
+        with self.lock:
+            for key in self:
+                try:
+                    item = self[key]
+                    if time.time() - item[1] > self.max_age:
+                        del self[key]
+                except KeyError:
+                    pass
+
+        # schedule the next cleanup
+        self.thread = threading.Timer(self.pool_time, self._purge, ())
+        self.thread.start()
+
+    def self._purgeStart():
+        self.thread = threading.Timer(self.pool_time, self._purge, ())
+        self.thread.start()
+
