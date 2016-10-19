@@ -9,13 +9,13 @@ with open("README.rst") as f:
     long_description = f.read()
 
 
-setup(name='expiringdict',
+setup(name='Dementia',
       version='0.0.2',
-      description="Dictionary with auto-expiring values for caching purposes. Based on Anton Efimenko's expiringdict.",
+      description="Dictionary with auto-expiring values for caching purposes. Based on Anton Efimenko's Dementia.",
       long_description=long_description,
       author='Ben Auffarth',
       author_email='auffarth@gmail.com',
-      url='https://github.com/benman1/ExpiryCache.git',
+      url='https://github.com/benman1/dementia.git',
       license='Apache 2',
       packages=find_packages(exclude=['tests']),
       include_package_data=True,

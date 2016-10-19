@@ -4,7 +4,7 @@ Dictionary with auto-expiring values for caching purposes.
 Expiration happens on any access, object is locked during cleanup from expired
 values. Can not store more than max_len elements - the oldest will be deleted.
 
->>> ExpiringDict(max_len=100, max_age_seconds=10)
+>>> Dementia(max_len=100, max_age_seconds=10)
 
 The values stored in the following way:
 {
@@ -21,7 +21,7 @@ from threading import RLock, Thread, Timer, Event
 from collections import OrderedDict
 
 
-class ExpiringDict(OrderedDict):
+class Dementia(OrderedDict):
     def __init__(self, max_len, max_age_seconds, pool_time=60*5):
         assert max_age_seconds >= 0
         assert max_len >= 1

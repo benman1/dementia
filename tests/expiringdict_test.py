@@ -1,18 +1,18 @@
 from . import *
-from expiringdict import *
+from dementia import *
 from time import sleep
 
 
 def test_create():
-    assert_raises(AssertionError, ExpiringDict, max_len=1, max_age_seconds=-1)
-    assert_raises(AssertionError, ExpiringDict, max_len=0, max_age_seconds=1)
+    assert_raises(AssertionError, Dementia, max_len=1, max_age_seconds=-1)
+    assert_raises(AssertionError, Dementia, max_len=0, max_age_seconds=1)
 
-    d = ExpiringDict(max_len=3, max_age_seconds=0.01)
+    d = Dementia(max_len=3, max_age_seconds=0.01)
     eq_(len(d), 0)
 
 
 def test_basics():
-    d = ExpiringDict(max_len=3, max_age_seconds=0.01, pool_time=100)
+    d = Dementia(max_len=3, max_age_seconds=0.01, pool_time=100)
 
     eq_(d.get('a'), None)
     d['a'] = 'x'
@@ -31,7 +31,7 @@ def test_basics():
     sleep(0.01)
     ok_('b' not in d)
 
-    # a is still in expiringdict, next values should expire it
+    # a is still in Dementia, next values should expire it
     d['c'] = 'x'
     d['d'] = 'y'
     d['e'] = 'z'
@@ -50,7 +50,7 @@ def test_basics():
 
 
 def test_pop():
-    d = ExpiringDict(max_len=3, max_age_seconds=0.01)
+    d = Dementia(max_len=3, max_age_seconds=0.01)
     d['a'] = 'x'
     eq_('x', d.pop('a'))
     sleep(0.01)
@@ -58,15 +58,15 @@ def test_pop():
 
 
 def test_repr():
-    d = ExpiringDict(max_len=2, max_age_seconds=0.01)
+    d = Dementia(max_len=2, max_age_seconds=0.01)
     d['a'] = 'x'
-    eq_(str(d), "ExpiringDict([('a', 'x')])")
+    eq_(str(d), "Dementia([('a', 'x')])")
     sleep(0.01)
-    eq_(str(d), "ExpiringDict([])")
+    eq_(str(d), "Dementia([])")
 
 
 def test_iter():
-    d = ExpiringDict(max_len=10, max_age_seconds=0.01, pool_time=100)
+    d = Dementia(max_len=10, max_age_seconds=0.01, pool_time=100)
     eq_([k for k in d], [])
     d['a'] = 'x'
     d['b'] = 'y'
@@ -79,7 +79,7 @@ def test_iter():
 
 
 def test_clear():
-    d = ExpiringDict(max_len=10, max_age_seconds=10)
+    d = Dementia(max_len=10, max_age_seconds=10)
     d['a'] = 'x'
     eq_(len(d), 1)
     d.clear()
@@ -87,7 +87,7 @@ def test_clear():
 
 
 def test_setdefault():
-    d = ExpiringDict(max_len=10, max_age_seconds=0.01)
+    d = Dementia(max_len=10, max_age_seconds=0.01)
 
     eq_('x', d.setdefault('a', 'x'))
     eq_('x', d.setdefault('a', 'y'))
@@ -97,7 +97,7 @@ def test_setdefault():
     eq_('y', d.setdefault('a', 'y'))
 
 def test_time_reset():
-    d = ExpiringDict(max_len=1, max_age_seconds=20, pool_time=10)
+    d = Dementia(max_len=1, max_age_seconds=20, pool_time=10)
     d['a'] = 'x'
     sleep(1.05)
     _ = d.__getitem__('a', with_age=False)
@@ -105,14 +105,14 @@ def test_time_reset():
     ok_(age < 1.0)
 
 def test_expired():
-    d = ExpiringDict(max_len=1, max_age_seconds=2, pool_time=1)
+    d = Dementia(max_len=1, max_age_seconds=2, pool_time=1)
     d['a'] = 'x'
     sleep(2.00)
     ok_('a' not in d)
 
 
 def test_not_implemented():
-    d = ExpiringDict(max_len=10, max_age_seconds=10)
+    d = Dementia(max_len=10, max_age_seconds=10)
     assert_raises(NotImplementedError, d.fromkeys)
     assert_raises(NotImplementedError, d.iteritems)
     assert_raises(NotImplementedError, d.itervalues)
