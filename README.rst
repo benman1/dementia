@@ -14,11 +14,10 @@ can not store more than `max_len` elements - the one that was used latest will b
 Additionally, when time expires they get deleted from memory.
 
 TODO: 
-* inherit from dict
-* pop would be taking the least used item
-** for this purpose a counter could be preserved
-** the counter can be used for checking if any retrieval has been made after last check
-
+1. inherit from dict instead of OrderedList
+2. pop takes the least used item
+      * for this purpose a counter could be preserved
+      * the counter can be used for checking if any retrieval has been made after last check
 
 Installation
 ------------
