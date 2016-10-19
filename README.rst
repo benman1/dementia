@@ -13,6 +13,12 @@ in the background, object is locked during cleanup from expired values. A dement
 can not store more than `max_len` elements - the one that was used latest will be deleted.
 Additionally, when time expires they get deleted from memory.
 
+TODO: 
+* inherit from dict
+* pop would be taking the least used item
+** for this purpose a counter could be preserved
+** the counter can be used for checking if any retrieval has been made after last check
+
 
 Installation
 ------------
