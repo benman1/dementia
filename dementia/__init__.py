@@ -4,7 +4,7 @@ Dictionary with auto-expiring values for caching purposes.
 Expiration happens on any access, object is locked during cleanup from expired
 values. Can not store more than max_len elements - the oldest will be deleted.
 
->>> Dementia(max_len=100, max_age_seconds=10)
+>>> Dementia(max_len=100, max_age=10)
 
 The values stored in the following way:
 {
@@ -16,159 +16,84 @@ The pool_time parameter (default 5 minutes or 60*5 seconds) controls how often
 the cache is cleared of old values.
 '''
 import sys
-import time
-from threading import RLock, Thread, Timer, Event
-from collections import OrderedDict
+import datetime
+from threading import RLock
+from collections import defaultdict
 
 
-class Dementia(OrderedDict):
-    def __init__(self, max_len, max_age_seconds, pool_time=60*5):
-        assert max_age_seconds >= 0
-        assert max_len >= 1
+class Dementia(dict):
+    def __init__(self, *args, **kwargs):
+        if 'max_len' in kwargs:
+            self.max_len = kwargs['max_len']
+            del kwargs['max_len']
+        else:
+            self.max_len = -1
 
-        OrderedDict.__init__(self)
-        self.max_len = max_len
-        self.max_age = max_age_seconds
+        if 'max_age' in kwargs:
+            self.max_age = kwargs['max_age']
+            del kwargs['max_age']
+        else:
+            self.max_age = -1
+
+        if 'pool_time' in kwargs:
+            self.pool_time = kwargs['pool_time']
+            del kwargs['pool_time']
+        else:
+            self.pool_time = self.max_age
+
         self.lock = RLock()
-        self.thread = Thread()
-        self.pool_time = pool_time
-        self.stop_event = Event()
-        self.__purgeStart()
+        self.__set_check_time()
+        self.update(*args, **kwargs)
 
-    def __contains__(self, key):
-        """ Return True if the dict has a key, else return False. """
-        try:
-            with self.lock:
-                item = OrderedDict.__getitem__(self, key)
-                if time.time() - item[1] < self.max_age:
-                    return True
-                else:
-                    del self[key]
-        except KeyError:
-            pass
-        return False
-
-    def __getitem__(self, key, with_age=False, reset_time=True):
-        """ Return the item of the dict.
-
-        Raises a KeyError if key is not in the map.
-        """
+    def __getitem__(self, key):
         with self.lock:
-            item = OrderedDict.__getitem__(self, key)
-            item_age = time.time() - item[1]
-            if item_age < self.max_age:
-                if reset_time:
-                    # time gets reset on each retrieval
-                    OrderedDict.__setitem__(self, key, (item[0], time.time()))
-                if with_age:
-                    return item[0], item_age
-                else:
-                    return item[0]
+            val = dict.__getitem__(self, key)
+            self.Usage[key] += 1
+            self.__purge()
+        return val
+
+    def __setitem__(self, key, val):
+        with self.lock:
+            if self.max_len > 0:
+                if len(self) == self.max_len:
+                    self.__remove_least_used()
+            self.__purge()
+            dict.__setitem__(self, key, val)
+            self.Usage[key] = 1
+
+    def update(self, *args, **kwargs):
+        with self.lock:
+            for k, v in dict(*args, **kwargs).items():
+                self[k] = v
+
+    def __set_check_time(self):
+        with self.lock:
+            self.check_time = datetime.datetime.now() + \
+                datetime.timedelta(seconds = self.pool_time)
+            self.Usage = defaultdict(int)
+
+    def __remove_least_used(self, thresh=None):
+        '''Checks the number of elements. If too many, remove least used.
+        '''
+        def argmin(z, thresh=None):
+            if not z: return None
+            min_val = min(z.values())
+            if thresh:
+                if min_val <= thresh:
+                    return None
             else:
-                del self[key]
-                raise KeyError(key)
+                return [k for k in z if z[k] == min_val][0]
 
-    def __setitem__(self, key, value):
-        """ Set d[key] to value. """
         with self.lock:
-            if len(self) == self.max_len:
-                self.popitem(last=False)
-            OrderedDict.__setitem__(self, key, (value, time.time()))
-
-    def pop(self, key, default=None):
-        """ Get item from the dict and remove it.
-
-        Return default if expired or does not exist. Never raise KeyError.
-        """
-        with self.lock:
-            try:
-                item = OrderedDict.__getitem__(self, key)
-                del self[key]
-                return item[0]
-            except KeyError:
-                return default
-
-    def get(self, key, default=None, with_age=False):
-        " Return the value for key if key is in the dictionary, else default. "
-        try:
-            return self.__getitem__(key, with_age)
-        except KeyError:
-            if with_age:
-                return default, None
-            else:
-                return default
-
-    def items(self):
-        """ Return a copy of the dictionary's list of (key, value) pairs. """
-        r = []
-        for key in self:
-            try:
-                r.append((key, self[key]))
-            except KeyError:
-                pass
-        return r
-
-    def values(self):
-        """ Return a copy of the dictionary's list of values.
-        See the note for dict.items(). """
-        r = []
-        for key in self:
-            try:
-                r.append(self[key])
-            except KeyError:
-                pass
-        return r
-
-    def fromkeys(self):
-        " Create a new dictionary with keys from seq and values set to value. "
-        raise NotImplementedError()
-
-    def iteritems(self):
-        """ Return an iterator over the dictionary's (key, value) pairs. """
-        raise NotImplementedError()
-
-    def itervalues(self):
-        """ Return an iterator over the dictionary's values. """
-        raise NotImplementedError()
-
-    def viewitems(self):
-        " Return a new view of the dictionary's items ((key, value) pairs). "
-        raise NotImplementedError()
-
-    def viewkeys(self):
-        """ Return a new view of the dictionary's keys. """
-        raise NotImplementedError()
-
-    def viewvalues(self):
-        """ Return a new view of the dictionary's values. """
-        raise NotImplementedError()
-
-    def interrupt(self):
-        # Wait for thread to exit.
-        self.stop_event.set()
-        # cancel timer
-        self.thread.cancel()
+            purge = argmin(self.Usage, thresh)
+            if purge:
+                print('removing {} because of usage: {}'.format(purge, self.Usage[purge]))
+                del self[purge]
+                del self.Usage[purge]
 
     def __purge(self):
-        with self.lock:
-            for key in self:
-                try:
-                    item = OrderedDict.__getitem__(self, key)
-                    if time.time() - item[1] > self.max_age:
-                        # print('purging {}'.format(item))
-                        del self[key]
-                except KeyError:
-                    pass
-
-        # schedule the next cleanup
-        if not self.stop_event.isSet():
-            self.thread = Timer(self.pool_time, self.__purge, ())
-            self.thread.start()
-
-    def __purgeStart(self):
-        self.thread = Timer(self.pool_time, self.__purge, ())
-        self.thread.start()
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.interrupt()
+        if self.max_age > 0:
+            if datetime.datetime.now() >= self.check_time:
+                self.__remove_least_used(thresh=0)
+                self.__set_check_time()
 
