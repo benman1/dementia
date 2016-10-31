@@ -1,7 +1,9 @@
 dementia
 ------------
 
-Caching objects with expiration; If objects haven't been retrieved for a
+OBSOLETE. Not maintained any more.
+
+Caching objects (LRU) with expiration; If objects haven't been retrieved for a
 number of seconds, they get deleted. On each retrieval the expiry date gets
 updated (this means retrieval becomes slightly slower). In this way, this
 data structure works in accordance with the neuroscience principle "use it,
