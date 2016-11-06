@@ -1,8 +1,6 @@
 dementia
 ------------
 
-OBSOLETE. Not maintained any more.
-
 Caching objects (LRU) with expiration; If objects haven't been retrieved for a
 number of seconds, they get deleted. On each retrieval the expiry date gets
 updated (this means retrieval becomes slightly slower). In this way, this
@@ -15,6 +13,9 @@ in the background, object is locked during cleanup from expired values. A dement
 can not store more than `max_len` elements - the one that was used latest will be deleted.
 Additionally, when time expires they get deleted from memory.
 
+This was originally based on the expiringdict library, but since was re-implemented based on the python dict (tests haven't been updated).
+
+OBSOLETE. Not maintained any more.
 
 Installation
 ------------
